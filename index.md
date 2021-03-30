@@ -1,5 +1,5 @@
 ## What is this website for?
->This is the Tolga's Progress Journal for the course IE360, it includes examples, related codes and report regarding the course material which is Statisical Forecasting and Time Series Data
+>[This](https://github.com/BU-IE-360/spring21-TolgaErdogann) is the Tolga's Progress Journal for the course IE360, it includes examples, related codes and report regarding the course material which is Statisical Forecasting and Time Series Data
 
 ## Week 0 (March 30)
 
