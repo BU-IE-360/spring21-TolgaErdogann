@@ -114,7 +114,7 @@ ggplot(dt, aes(x = Date)) +
   geom_hline(yintercept=mean(dt$LoanInterest), linetype="dashed", size = 0.2)
 ```
 
-We can clearly see the negative correlation in the word "kredi" search on google and credit interest rates in Turkey, as people tend to take more credit with high interest rates. 
+We can clearly see the negative correlation in the word "kredi" search on google and credit interest rates in Turkey, as people tend to take more credit with lower interest rates. 
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
 ggplot(dt, aes(x = KrediSearch$KrediSearch, y = LoanInterest))+
