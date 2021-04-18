@@ -1,0 +1,203 @@
+---
+title: "HW1"
+author: "Tolga Erdoğan"
+date: "17 04 2021"
+output:
+  html_document:
+    code_folding: show
+    toc: yes
+    toc_float: yes
+---
+
+# Data Visualization on CPI, CCI, Loan Interest Rates in Turkey and Related Google Trends Data
+
+## 1) Introduction
+The macroeconomic conditions of Turkey have always been a controversial topic for years. The government and TCMB (Central Bank of the Republic of Turkey) make monetary and fiscal policies to ensure economic stability. However, sudden changes in exchange rates in 2018 and the COVID 19 gave rise to instability.  
+
+In this homework, I analyzed loan interest rates, CPI, and CCI data from 2015 to 2021 in Turkey in order to understand the macroeconomic trends, and also I tried to find correlations between related Google Search data.
+
+*You can hide the codes by clicking on the "Code" button at the right top.*
+
+## 2) Data Preperation
+
+### 2.1) Libraries
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+library(tidyverse)
+library(EVDS)
+library(lubridate)
+library(zoo)
+library(ggplot2)
+library(scales)
+```
+
+### 2.2) Data Preperation
+I used [EVDS (Electronic Data Distribution System) package](https://algopoly.github.io/EVDS/index.html)  and [Google Trends](https://trends.google.com/trends/?geo=US) to import the data. Necesarry manipulations to raw data is shown below.
+
+
+```{r include=FALSE}
+set_evds_key("pEKs6ZZc7n")
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+df <- get_series(series = c("TP.KTFTUK","TP.TG2.Y01"),start_date = "01-03-2015", end_date = "01-03-2021")
+df <- data.frame(df)
+dt <- data.frame(Month = 1:73, Year = NA, Date = NA, LoanInterest = NA, CPI = NA, CCI = NA, KrediSearch = NA)
+dt$Date <-df$items.Tarih  
+CPI = read.csv("C:/Users/asus/Documents/GitHub/spring21-TolgaErdogann/Data/CPI%Change.csv")
+gglsearch = read.csv("C:/Users/asus/Documents/GitHub/spring21-TolgaErdogann/Data/multiTimeline.csv")
+Months <- c(1,2,3,4,5,6,7,8,9,10,11,12)
+dt$Month <- c("03","04","05","06","07","08","09","10","11","12", rep(Months,5),"01","02","03")
+dt$Year <- c(rep(2015,10),rep(2016,12),rep(2017,12),rep(2018,12), rep(2019,12), rep(2020,12), rep(2021,3))
+dt$Date <- paste(dt$Year,dt$Month,"15", sep = "-")
+dt$LoanInterest <- df$items.TP_KTFTUK
+dt$Date <- as.Date(dt$Date)
+dt$CPI <- CPI
+dt$CCI <- df$items.TP_TG2_Y01
+dt$KrediSearch <- gglsearch
+dt$CCI <- as.numeric(dt$CCI)
+dt$LoanInterest <- as.numeric(dt$LoanInterest)
+```
+
+After the rearrangement of data, data frame 'dt' is look like this
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+head(dt)
+```
+
+
+## 3) Data Visualization
+
+### 3.1) Loan Interest Rates in Turkey (Commercial)
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+ggplot(dt, aes(Date,LoanInterest, group =1)) +
+  geom_line(color = "#0099f9", size = 1.5) +
+  geom_point(color = "#0099f9", size = 3) +
+  labs(title = "Loan Interest Rates in Turkey", 
+       x = "Date",
+       y = "Interest Rate(%)",
+       subtitle = "Data from 2015 to 2021",
+       caption = "Source: EVDS"
+  ) +
+  theme_minimal() +
+  guides(color = F) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=0.5),plot.title = element_text(color = "#0099f9", size = 20, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = 13, face = "bold", hjust = 0.5),
+        plot.caption = element_text(face = "italic", hjust = 0))+
+  coord_cartesian(ylim = c(5,50))+
+  scale_x_date(date_breaks = "3 months")+
+  geom_smooth(method = lm, color = "darkblue")
+```
+
+In 2018, due to sudden changes in USD/TL, TCMB raised the interests to stabilize the exchange rates and inflation, and also banks rearranged the loan credits accordingly as expected, we can clearly see the increasing credit rates from the graph in 2018. After the COVID-19 pandemic, Turkey at first tried to lower the interests as other countries to prevent an economic crisis, however, due to lack of confidence in TL, the USD/TL rate rised too much, and nowadays TCMB is trying to stabilize the exchange rate, inflation and confidence on TL with high-interest rates. 
+
+#### 3.1.1) Google Trends data for word "Kredi"
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+scaleFactor <- max(dt$LoanInterest) / max(dt$KrediSearch$KrediSearch)
+ggplot(dt, aes(x = Date)) +
+  geom_line(aes(y = LoanInterest, color = "#0099f9"), size = 1.5) +
+  geom_line(aes(y = KrediSearch$KrediSearch*scaleFactor, color = "#33ff8b"), size = 1.5) +
+  labs(title = "Google Trend Data for word 'Kredi'", 
+       subtitle = "Data from 2015 to 2021",
+       caption = "Source: EVDS, Google Trends"
+  ) +
+  theme_minimal() +
+  guides(color = F) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=0.5),plot.title = element_text(color = "#0099f9", size = 20, face = "bold", hjust = 0.5),
+        axis.title.y = element_text(color = "#0099f9", face = "bold"),
+        axis.title.y.right = element_text(color = "#33ff8b", face = "bold"),
+        plot.subtitle = element_text(size = 13, face = "bold", hjust = 0.5),
+        plot.caption = element_text(face = "italic", hjust = 0))+
+  scale_y_continuous(
+    "Loan Interest", 
+    sec.axis = sec_axis(~./scaleFactor, name = "Google Search for 'Kredi'")) +
+  scale_x_date(date_breaks = "3 months") +
+  geom_hline(yintercept=mean(dt$LoanInterest), linetype="dashed", size = 0.2)
+```
+
+We can clearly see the negative correlation in the word "kredi" search on google and credit interest rates in Turkey, as people tend to take more credit with high interest rates. 
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+ggplot(dt, aes(x = KrediSearch$KrediSearch, y = LoanInterest))+
+  geom_point(color = "#0099f9") +
+labs(title = "Relationship between 'Kredi' search and Loan Interest Rates", 
+       x = "'Kredi' search",
+       y = "Loan Interest",
+       subtitle = "Data from 2015 to 2021",
+       caption = "Source: EVDS"
+  ) + 
+  theme_minimal() +
+  theme(plot.title = element_text(color = "#0099f9", size = 16, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = 13, face = "bold", hjust = 0.5),
+        plot.caption = element_text(face = "italic", hjust = 0))+
+  geom_smooth(method = lm, color = "darkblue")
+```
+
+For interest rates between 15 and 40 google search for "kredi" has not changed too much. However, below 13 we clearly see that searches has risen up nearly 100%. When we draw the regression line, we see the negative correlation between variables.
+
+
+
+### 3.2) CPI in Turkey
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+ggplot(dt, aes(Date,CPI$CPI, group =1)) +
+  geom_line(color = "#0099f9", size = 2) +
+  geom_point(color = "#0099f9", size = 4) +
+  labs(title = "CPI in Turkey (% Change)", 
+       x = "Date",
+       y = "CPI (% Change Yearly)",
+       subtitle = "Data from 2015 to 2021",
+       caption = "Source: EVDS"
+       ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=0.5),plot.title = element_text(color = "#0099f9", size = 20, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = 13, face = "bold", hjust = 0.5),
+        plot.caption = element_text(face = "italic", hjust = 0))+
+  coord_cartesian(ylim = c(5, 30))+
+  scale_x_date(date_breaks = "3 months") +
+  geom_smooth(method = lm, color = "darkblue")
+```
+
+
+#### 3.2.1) Relationship between CPI and Loan Interest Rates
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+ggplot(dt, aes(x = CPI$CPI, y = LoanInterest))+
+  geom_point(color = "#0099f9") +
+labs(title = "Relationship between CPI and Loan Interest Rates", 
+       x = "CPI",
+       y = "Loan Interest",
+       subtitle = "Data from 2015 to 2021",
+       caption = "Source: EVDS"
+  ) + 
+  theme_minimal() +
+  theme(plot.title = element_text(color = "#0099f9", size = 20, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = 13, face = "bold", hjust = 0.5),
+        plot.caption = element_text(face = "italic", hjust = 0))+
+  geom_smooth(method = lm, color = "darkblue")
+```
+
+CPI directly effects inflation, and there is a positive correlation between interest rates and CPI as we can see from the graphs. Causes of the changes in CPI is similar with the interests mentioned above.
+
+### 3.3) CCI Interest Rates in Turkey
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+ggplot(dt, aes(Date,CCI, group =1)) +
+  geom_line(color = "#0099f9", size = 2) +
+  geom_point(color = "#0099f9", size = 4) +
+  labs(title = "CCI in Turkey", 
+       x = "Date",
+       y = "CCI",
+       subtitle = "Data from 2015 to 2021",
+       caption = "Source: EVDS"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=0.5),plot.title = element_text(color = "#0099f9", size = 20, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = 13, face = "bold", hjust = 0.5),
+        plot.caption = element_text(face = "italic", hjust = 0))+
+  coord_cartesian(ylim = c(70,100))+
+  scale_x_date(date_breaks = "3 months") +
+  geom_smooth(method = lm, color = "darkblue")
+```
+
+As we see from previous graphs, the yearly change rate of CPI and thus inflation has raised over the years. The instability in the Turkish economy led people to concern more about their prosperity which resulted in a decrease in CCI over years. We see the sudden decrease of CCI in 2018 because of the sudden rise of USD/TL exchange rates mentioned above.
+
+
+
