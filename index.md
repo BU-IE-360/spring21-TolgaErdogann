@@ -8,3 +8,7 @@
 ## Homework 1
 
 >[Here](Files/HW1.html) is my data visualization analysis
+
+## Homework 2
+
+>[Here](Files/HW2.html) is my analysis for HW2

@@ -1,0 +1,203 @@
+---
+title: "HW2"
+output:
+  html_document:
+    code_folding: show
+    toc: yes
+    toc_float: yes
+---
+
+# Introduction 
+
+In this homework, I will try to estimate the April 2021 value of 'Consumer Price Index for Alcoholic Beverages and Tobacco' in Turkey by constructing a time series regression model. Relevant predictors will be examined step by step and, and I will try to construct a model having residuals with zero mean and constant variance and also I will try to minimize autocorrelation by necessary manipulations.
+
+
+
+# Data Preperation
+
+Necessary Libraries
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+library(ggplot2)
+library(data.table)
+library(readxl)
+library(lubridate)
+library(forecast)
+```
+
+Data for CPI, USD, and EUR are added to the data from 2008-10 to 2021-3
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+Data <- read_excel("/Users/tolgaerdogan/Documents/GitHub/spring21-TolgaErdogann/Data/EVDS.xlsx")
+Data <- as.data.table(Data)
+Data$Date <- as.Date(Data$Date)
+head(Data)
+```
+
+
+# Data Analysis and Visualization
+
+## Historical Alcoholic Beverages and Tobacco CPI Data Analysis
+
+Time series for Alcoholic Beverages and Tobacco CPI is plotted
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+ggplot(Data ,aes(x=Date,y=CPIAlc)) + geom_line() +
+  labs(title = "CPI for Alcoholic Beverages and Tobacco", 
+       x = "Date",
+       y = "TRY",
+       subtitle = "Data from 2008 to 2021",
+       caption = "Source: EVDS"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=0.5),plot.title = element_text(color = "#0099f9", size = 20, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = 13, face = "bold", hjust = 0.5),
+        plot.caption = element_text(face = "italic", hjust = 0))+
+  scale_x_date(date_breaks = "12 months") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=0.5))
+```
+
+
+Since the variance doesn't seem constant through time, I took the logarithm of CPI to linearize 
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+Data$CPIAlc <- log(Data$CPIAlc)
+ggplot(Data ,aes(x=Date,y=CPIAlc)) + geom_line()+
+  labs(title = "CPI for Alcoholic Beverages and Tobacco log", 
+       x = "Date",
+       y = "",
+       subtitle = "Data from 2008 to 2021",
+       caption = "Source: EVDS"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=0.5),plot.title = element_text(color = "#0099f9", size = 20, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = 13, face = "bold", hjust = 0.5),
+        plot.caption = element_text(face = "italic", hjust = 0))+
+  scale_x_date(date_breaks = "12 months") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=0.5))
+```
+
+# Regression Analysis
+
+## Trend Analysis
+
+Since CPI increases with time as seen in graph, at first trend component is chosen as predictor
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+Data[,trend:=1:.N]
+ts_reg=lm(CPIAlc~trend,Data)
+Data[,trend_constant:=predict(ts_reg,Data)]
+
+ggplot(Data ,aes(x=Date)) +
+  geom_line(aes(y=CPIAlc,color='CPIAlc')) + 
+  geom_line(aes(y=trend_constant,color='Trend'))+
+  scale_x_date(date_breaks = "12 months") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=0.5))
+fit <- lm(CPIAlc~trend_constant, data = Data)
+summary(fit)
+checkresiduals(fit)
+```
+If we look at the results, adjusted r-square value and p-value seem successful however to ensure the assumptions made earlier we need to lover autocorrelation with adding new predictors to data
+
+## Predictors
+
+I added CPI and EUR values as predictors. If the price of basket increases we expect an increase in alcohol and tobacco prices as well. And also since Turkey imports alcohol mainly from Europe, it seems beneficial to add EUR exchange rates in model.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+fit <- lm(CPIAlc~trend_constant+CPI+EUR, data = Data)
+checkresiduals(fit)
+summary(fit)
+Data[,regline:=predict(fit,Data)]
+ggplot(Data ,aes(x=Date)) +
+  geom_line(aes(y=CPIAlc, color='Real')) + 
+  geom_line(aes(y=regline,color='Fitted'))+
+  theme_minimal()+
+  scale_x_date(date_breaks = "12 months") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=0.5))
+```
+
+After we add the predictors, residual standard error and autocorrelation have decreased, however we couldn't catch the lags seen on data. To improve our model we need to add lag information to the model.
+
+## Adding appropriate lag to the model 
+
+I added lag1, lag3, lag6 and examined their correlation with residuals. 
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+Data[, residuals:=residuals(fit)]
+Data[, lag1:=shift(residuals(fit),1)]
+Data[, lag3:=shift(residuals(fit),3)]
+Data[, lag6:=shift(residuals(fit),6)]
+summary((lm(CPIAlc~trend_constant+CPI+EUR+lag6, data = Data)))
+ggplot(Data, aes(x=residuals, y= lag1))+
+  geom_point()+
+  geom_abline(slope=1, intercept = 0)
+ggplot(Data, aes(x=residuals, y= lag3))+
+  geom_point()+
+  geom_abline(slope=1, intercept = 0)
+ggplot(Data, aes(x=residuals, y= lag6))+
+  geom_point()+
+  geom_abline(slope=1, intercept = 0)
+```
+
+When we compare the lag options. Lag1 is the most appropriate one to add to the model
+
+
+## Model Analysis
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+fit <- lm(CPIAlc~trend_constant+CPI+EUR+lag1, data = Data)
+checkresiduals(fit)
+summary(fit)
+
+```
+
+Adding lag1 has significantly lowered the autocorrelation
+
+## Visualization of the model
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+Data[,regline:=predict(fit,Data)]
+ggplot(Data ,aes(x=Date)) +
+  geom_line(aes(y=CPIAlc, color='Real')) + 
+  geom_line(aes(y=regline,color='Trend'))
+ggplot(Data, aes(x=regline, y=CPIAlc))+
+  geom_point()
+```
+
+
+# Forecast
+At first I predicted the values of CPI and EUR for 2021-4 then I added those values to the model and predicted the value of CPI for Alcoholic Beverages and Tobacco for 2021-04. 
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+Data=rbind(Data, data.table(Date = as.Date("2021-04-01")),fill=T )
+Data[,trend:=1:.N]
+predict(Data$EUR)
+predict(Data$CPI)
+predict(Data$lag1)
+Data[is.na(CPI)==T, CPI:= 529.12]
+Data[is.na(EUR)==T, EUR:= 9.208]
+Data[is.na(lag1)==T, lag1:= "-0.07285283"]
+ts_reg=lm(CPIAlc~trend,Data)
+Data[,trend_constant:=predict(ts_reg,Data)]
+
+
+Data[is.na(regline)==T, regline:=predict(fit, Data[is.na(regline)])]
+Data[,CPIAlcReal:=exp(CPIAlc)]
+Data[,CPIAlcPred:=exp(regline)]
+
+ggplot(Data ,aes(x=Date)) +
+  geom_line(aes(y=CPIAlcReal, color='Real')) + 
+  geom_line(aes(y=CPIAlcPred,color='Forecast'))
+
+Data$CPIAlcPred[151]
+```
+
+
+
+# Conclusion 
+
+In this study I have constructed a model to predict CPI values for alcoholic beverages and tobacco in Turkey. CPI and EUR exchange rates are significantly correlated and thus selected as predictors. 
+
+CPI for alcoholic beverages and tobacco is predicted as 873.157 for 2021-04, actual=886.09
+
+
+
