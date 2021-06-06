@@ -22,7 +22,6 @@ library(tidyverse)
 library(zoo)
 library(urca)
 library(forecast)
-library(xts)
 ```
 
 Data preparation and necessary manipulations
