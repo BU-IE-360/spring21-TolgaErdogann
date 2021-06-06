@@ -12,3 +12,7 @@
 ## Homework 2
 
 >[Here](Files/HW2.html) is my analysis for HW2
+
+## Homework 3
+
+>[Here](Files/HW3.html) is my analysis for HW3

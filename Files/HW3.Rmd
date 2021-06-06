@@ -1,0 +1,281 @@
+---
+title: "HW3"
+output:
+  html_document:
+    code_folding: show
+    toc: yes
+    toc_float: yes
+---
+
+# Introduction 
+
+In this report, the electric consumption data of Turkey will be analyzed and used to forecast with an appropriate ARMA model for two weeks. 
+
+# Data Preparation
+
+Necessary Libraries
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+library(data.table)
+library(lubridate)
+library(tidyverse)
+library(zoo)
+library(urca)
+library(forecast)
+library(xts)
+```
+
+Data preparation and necessary manipulations
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+data_path='/Users/tolgaerdogan/Documents/GitHub/spring21-TolgaErdogann/Data/RealTimeConsumption-01012016-20052021.csv'
+consumption=fread(data_path)
+consumption=consumption[!is.na(Consumption)]
+consumption[,Date:=as.Date(Date)]
+head(consumption)
+consumption=consumption %>% 
+  mutate(Date = make_datetime(year=year(Date), month=month(Date), day=mday(Date), hour=Hour))
+consumption$Consumption<-as.numeric(consumption$Consumption)
+str(consumption)
+
+
+```
+
+# Seasonality Analysis
+
+Electric consumption should be affected by hourly, weekly, and also monthly basis. In this part seasonality of the data will be investigated in these time regions.
+
+## Hourly Seasonality
+
+At first, data will be investigated on an hourly basis to check whether there is a seasonality in day hours. 
+To check the seasonality, I converted the hourly data to a time series object with frequency 24.
+
+```{r echo=TRUE, message=FALSE, fig.show='hold', out.width="50%", warning=FALSE, paged.print=FALSE}
+hourly = consumption[, Consumption]
+ts_hourly<-ts(hourly, freq=24)
+ts.plot(ts_hourly,main="Hourly usage")
+acf(ts_hourly)
+
+```
+From the autocorrelation diagram, we can see the correlation in the 1st and 25th lines, which can conclude that seasonality occurs on an hourly basis. To further investigate I will decompose the series with additive decomposition to check the seasonal component. I preferred additive decomposition since the magnitude of the seasonal component does not depend on the magnitude of the data, in other words as we can see from the graph of hourly consumption the magnitude of seasonality does not change as the series go up or down. 
+
+```{r echo=TRUE, message=FALSE,fig.show='hold', out.width="50%", warning=FALSE, paged.print=FALSE}
+Hourly_additive<-decompose(ts_hourly, type="additive")
+plot(Hourly_additive)
+plot(Hourly_additive$seasonal[1:100], type='l')
+```
+
+When we check the seasonal component, we can clearly see the pattern in 24 hours which makes sense since we expect the consumption to decrease in night hours.
+
+
+## Weekly Seasonality
+
+To check the weekly seasonality data is converted to a daily basis by taking the mean values of day hours.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE,fig.show='hold', out.width="50%", paged.print=FALSE}
+daily = consumption[, list(Consumption=mean(Consumption, na.rm=TRUE)), by=list(as.Date(Date))]
+ts_daily=ts(daily$Consumption,freq=7)
+ts.plot(ts_daily,main="Daily Usage")
+acf(ts_daily)
+
+```
+
+On weekly basis, from the autocorrelation diagram, we can see the correlation between weekdays. To further investigate I will check the seasonal component with additive decomposition
+
+```{r echo=TRUE, message=FALSE, warning=FALSE,fig.show='hold', out.width="50%", paged.print=FALSE}
+Daily_additive<-decompose(ts_daily, type = "additive")
+plot(Daily_additive)
+plot(Daily_additive$seasonal[1:30], type='l')
+```
+
+When we check the seasonal component, we can clearly see the pattern in 7 days which makes sense since we expect the consumption to decrease on weekends.
+
+## Yearly Seasonality
+
+To check the weekly seasonality data is converted to a monthly basis with necessary manipulations. 
+
+```{r echo=TRUE, message=FALSE, warning=FALSE,fig.show='hold', out.width="50%", paged.print=FALSE}
+monthly = consumption[, list(Consumption=mean(Consumption, na.rm=TRUE)), by=list(month(Date), year(Date))]
+ts_monthly=ts(monthly$Consumption,freq=12)
+ts.plot(ts_monthly,main="Monthly Usage")
+acf(ts_monthly)
+```
+
+Since we eliminated the weekly and monthly correlation, autocorrelation decreased significantly
+```{r echo=TRUE, message=FALSE, warning=FALSE,fig.show='hold', out.width="50%", paged.print=FALSE}
+Monthly_additive<-decompose(ts_monthly, type = "additive")
+plot(Monthly_additive)
+plot(Monthly_additive$seasonal[1:70], type='l')
+```
+
+## Deciding on the frequency
+
+From the seasonality analysis investigated on different time regions, we encountered a clear seasonality on daily and weekly basis. There was also a seasonality on yearly basis but it was not significant as the others therefore, to imply daily and monthly seasonality I will use a frequency of 7*24=128
+
+# Constructing the Model
+
+
+
+## Deseasonalize and Detrend
+
+Constructing a time series with frequency 168, and decomposing the series with additive decomposition
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, fig.show='hold', out.width="50%",paged.print=FALSE}
+model_ts<-ts(hourly,start(2016,1),frequency = 168)
+model_ts_additive<-decompose(model_ts, type = "additive")
+plot(model_ts_additive)
+plot(model_ts_additive$seasonal[1:500], type='l')
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE,paged.print=FALSE}
+summary(ur.kpss(model_ts_additive$random))
+```
+
+When we check the stationarity of random component, we see that the value of test-statistic is lower than the critical values, showing that the random component is stationary. We can use this data for our model.
+
+
+Subtracting the seasonal component
+
+```{r echo=TRUE, message=FALSE, warning=FALSE,fig.show='hold', out.width="50%", paged.print=FALSE}
+model_deseasonalized<-model_ts-model_ts_additive$seasonal
+plot(model_deseasonalized[0:10000], type = 'l')
+acf(model_deseasonalized)
+```
+
+When we check the autocorrelation, we still encounter seasonality since we haven't removed the yearly seasonality
+
+Subtracting the trend
+
+```{r echo=TRUE, message=FALSE, warning=FALSE,fig.show='hold', out.width="50%", paged.print=FALSE}
+model_detrend<-model_deseasonalized-model_ts_additive$trend
+plot(model_detrend[0:10000], type = 'l')
+acf(model_detrend,na.action = na.omit)
+```
+
+Subtracting also the trend, ACF values lowered significantly however we are still out of the confidence interval. In this context, we should consider lags however since we are trying to construct an ARMA model I will continue with this model.
+
+
+##ARMA Model
+
+### AR 
+
+Checking the p values to find the lowest AIC value
+
+```{r echo=TRUE, message=FALSE, warning=FALSE,fig.show='hold', out.width="50%", paged.print=FALSE}
+Model_1<-arima(model_ts_additive$random, order=c(1,0,0))
+Model_2<-arima(model_ts_additive$random, order=c(2,0,0))
+Model_3<-arima(model_ts_additive$random, order=c(3,0,0))
+Model_4<-arima(model_ts_additive$random, order=c(4,0,0))
+Model_5<-arima(model_ts_additive$random, order=c(5,0,0))
+Model_6<-arima(model_ts_additive$random, order=c(6,0,0))
+AIC(Model_1)
+AIC(Model_2)
+AIC(Model_3)
+AIC(Model_4)
+AIC(Model_5)
+AIC(Model_6)
+```
+
+AIC values are the same for Model_4 and Model_5, I will choose the lower one to ensure simplicity
+
+### MA
+
+```{r echo=TRUE, message=FALSE, warning=FALSE,fig.show='hold', out.width="50%", paged.print=FALSE}
+Model_1<-arima(model_ts_additive$random, order=c(0,0,1))
+Model_2<-arima(model_ts_additive$random, order=c(0,0,2))
+Model_3<-arima(model_ts_additive$random, order=c(0,0,3))
+Model_4<-arima(model_ts_additive$random, order=c(0,0,4))
+Model_5<-arima(model_ts_additive$random, order=c(0,0,5))
+Model_6<-arima(model_ts_additive$random, order=c(0,0,6))
+AIC(Model_1)
+AIC(Model_2)
+AIC(Model_3)
+AIC(Model_4)
+AIC(Model_5)
+AIC(Model_6)
+```
+
+AIC values will keep decreasing since it is time consuming and to ensure simplicity, I will stop here and go with q=5
+
+### ARMA
+
+I will check the adjacent to see if we can find a better AIC value, and also lowering the values of parameters will decrease the complexity of the model.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE,fig.show='hold', out.width="50%", paged.print=FALSE}
+Model1<-arima(model_ts_additive$random, order=c(4,0,5))
+Model2<-arima(model_ts_additive$random, order=c(3,0,4))
+AIC(Model1)
+AIC(Model2)
+
+```
+
+Model2 resulted better, therefore I will continue with Model2
+
+### Fitting the Model
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE,fig.show='hold', out.width="50%", paged.print=FALSE}
+Fitted<-model_ts_additive$random-Model2$residuals
+modeltransformed<-Fitted+model_ts_additive$seasonal+model_ts_additive$trend
+```
+
+After fitting the model let's check the fitted model with the actual data
+
+```{r echo=TRUE, message=FALSE, warning=FALSE,fig.show='hold', out.width="50%", paged.print=FALSE}
+plot(model_ts, type ='l')
+points(modeltransformed,type='l', col = 2, lty = 2)
+
+plot(model_ts[40000:40500], type ='l')
+points(modeltransformed[40000:40500],type='l', col = 2, lty = 2)
+```
+
+# Forecast
+
+Since we are trying to forecast 14 days in an hourly basis, n.ahead is set to 14*24=336 and since 2016-1-1 is friday, I started the seasonal component from 145 
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+model_forecast<-predict(Model2, n.ahead = 336)$pred
+model_forecast=ts(model_forecast)
+
+last_trend <-tail(model_ts_additive$trend[!is.na(model_ts_additive$trend)],1)
+seasonality=model_ts_additive$seasonal[145:480]
+
+model_forecast=model_forecast+seasonality+last_trend
+plot(model_forecast)
+
+```
+
+## Comparison with actual data
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+data_path='/Users/tolgaerdogan/Documents/GitHub/spring21-TolgaErdogann/Data/RealTimeConsumption-06052021-20052021.csv'
+consumptionactual=fread(data_path)
+consumptionactual[,Date:=as.Date(Date)]
+actual_ts=ts(consumptionactual$Consumption)
+plot(actual_ts)
+points(model_forecast,type='l', col = 2, lty = 2)
+
+```
+
+Our model has done a good job in terms of seasonality however since the trend is assumed constant, it couldn't catch some days. 
+
+## Error calculation
+
+To calculate daily bias data is transformed on a daily basis
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+consumptionactual=consumptionactual[, ConsumptionForecast:=as.numeric(model_forecast)]
+consumptionactual=consumptionactual[, Error:=Consumption-ConsumptionForecast]
+consumptionactual=consumptionactual[, AbsError:=abs(Error)]
+consumptionactual=consumptionactual[, Bias:=Error/Consumption]
+consumptionactual=consumptionactual[, Ape:=AbsError/Consumption]
+Errors = consumptionactual[, list(ConsumptionActual=mean(Consumption, na.rm=TRUE), ConsumptionForecast=mean(ConsumptionForecast, na.rm=TRUE), dailybias=mean(Bias, na.rm=TRUE),dailymape=mean(Ape, na.rm=TRUE)), by=list(as.Date(Date))]
+Errors
+```
+
+Daily bias and daily MAPE are seemed to be larger on the the days that model couldn't catch actual consumptions, however in general Bias and MAPE values are small enough.
+
+
+# Conclusion 
+
+In this report I tried to construct an ARMA model to forecast the electricity consumption of Turkey for 2 weeks in an hourly basis. Frequency of 168 in hour terms is chosen for the seasonality and I tried to fit an ARMA model on that frequency. Comparing different p and q values ARMA(3,0,4) resulted best and used for the model. 
