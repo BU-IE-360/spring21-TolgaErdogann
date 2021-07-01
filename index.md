@@ -17,10 +17,3 @@
 
 >[Here](Files/HW3.html) is my analysis for HW3
 
-## Homework 4&5
-
->[Here](Files/HW-4-and-5.html) is our analysis for HW 4 and 5 (Group 16)
-
-## Project Report Group 16
-
->[Here](Files/Project-Rmd.html) is the project report of Group 16
